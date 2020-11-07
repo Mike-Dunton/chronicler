@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  youtube-dl:
+    image: youtube-dl
+    command: youtube-dl 'insert url here'
+    volumes:
+      - type: bind
+        source: ./downloaded
+        target: /workdir
+        volume:
+          nocopy: true  # flag to disable copying of data from a container when a volume is created
