@@ -14,6 +14,7 @@ import (
 	"github.com/labstack/echo/middleware"
 )
 
+// DownloadRequest defines the payload request
 type DownloadRequest struct {
 	URL string `json:"url"`
 }

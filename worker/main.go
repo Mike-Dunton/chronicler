@@ -12,6 +12,7 @@ import (
 	"github.com/gomodule/redigo/redis"
 )
 
+// Context is worker context
 type Context struct {
 	requestID int64
 }
@@ -45,11 +46,13 @@ func main() {
 
 }
 
+// Log is job middle ware that logs the job name.
 func (c *Context) Log(job *work.Job, next work.NextMiddlewareFunc) error {
 	log.Println("Starting job: ", job.Name)
 	return next()
 }
 
+// Download is this workers download function
 func (c *Context) Download(job *work.Job) error {
 	// Extract arguments:
 	URL := job.ArgString("url")
