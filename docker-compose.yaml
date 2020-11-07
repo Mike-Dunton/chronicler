@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  redis:
+    image: "redis:alpine"
+  web:
+    build:
+      context: .
+      dockerfile: chronicler-web.dockerfile
+    image: chronicler:web
+    ports:
+      - 8080:8080
+  worker:
+    build:
+      context: .
+      dockerfile: chronicler-worker.dockerfile
+    image: chronicler:worker
+    volumes:
+      - type: bind
+        source: ./downloaded
+        target: /workdir
+        volume:
+          nocopy: true  # flag to disable copying of data from a container when a volume is created
