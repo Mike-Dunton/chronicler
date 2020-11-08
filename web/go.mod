@@ -3,7 +3,9 @@ module github.com/mike-dunton/chronicler/web
 go 1.15
 
 require (
+	github.com/braintree/manners v0.0.0-20160418043613-82a8879fc5fd // indirect
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
+	github.com/gocraft/web v0.0.0-20190207150652-9707327fb69b // indirect
 	github.com/gocraft/work v0.5.1
 	github.com/gomodule/redigo v1.8.2
 	github.com/google/uuid v1.1.2

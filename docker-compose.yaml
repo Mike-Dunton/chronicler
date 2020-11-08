@@ -8,14 +8,27 @@ services:
       context: .
       dockerfile: chronicler-web.dockerfile
     image: chronicler:web
+    depends_on:
+      - redis
     ports:
       - 8080:8080
+      - 8181:8181
+    volumes:
+      - type: bind
+        source: ./configs/web.json
+        target: /opt/chronicler/config.json
   worker:
     build:
       context: .
       dockerfile: chronicler-worker.dockerfile
     image: chronicler:worker
+    depends_on:
+      - redis
     volumes:
+      - type: bind
+        source: ./configs/youtube-dl.conf
+        target: /etc/youtube-dl.conf
+        read_only: true
       - type: bind
         source: ./downloaded
         target: /workdir

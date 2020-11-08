@@ -56,21 +56,23 @@ func (c *Context) Log(job *work.Job, next work.NextMiddlewareFunc) error {
 func (c *Context) Download(job *work.Job) error {
 	// Extract arguments:
 	URL := job.ArgString("url")
+	outputTemplate := job.ArgString(("outputTemplate"))
 	requestID := job.ArgString("requestID")
 	if err := job.ArgError(); err != nil {
 		return err
 	}
 	job.Checkin(fmt.Sprintf("Request: %v URL: %v", requestID, URL))
-	cmd := exec.Command("youtube-dl", URL)
+	cmd := exec.Command("youtube-dl", fmt.Sprintf("-o %v", outputTemplate), URL)
 	var out bytes.Buffer
 	var errOut bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errOut
 	err := cmd.Run()
 	if err != nil {
+		job.Checkin(fmt.Sprintf("Download Failed: %v URL: %v err: %v", requestID, URL, errOut.String()))
 		return err
-		//return c.String(http.StatusBadRequest, fmt.Sprintf("err:  %q", errOut.String()))
 	}
+	job.Checkin(fmt.Sprintf("Successful Download: %v URL: %v output: %v", requestID, URL, out.String()))
 
 	return nil
 }
