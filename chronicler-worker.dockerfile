@@ -46,6 +46,7 @@ COPY --from=builder /etc/passwd /etc/passwd
 COPY --from=builder /etc/group /etc/group
 # Copy our static executable.
 COPY --from=builder /go/bin/chronicler-worker /go/bin/chronicler-worker
+
 # Use an unprivileged user.
 USER appuser:appuser
 WORKDIR /workdir

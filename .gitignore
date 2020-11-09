@@ -19,3 +19,6 @@ vendor/
 *.tfstate
 downloaded/
 .vscode/
+sql.db
+node_modules/
+build/

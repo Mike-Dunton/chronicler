@@ -8,9 +8,9 @@ require (
 	github.com/gocraft/web v0.0.0-20190207150652-9707327fb69b // indirect
 	github.com/gocraft/work v0.5.1
 	github.com/gomodule/redigo v1.8.2
-	github.com/google/uuid v1.1.2
 	github.com/labstack/echo v3.3.10+incompatible
 	github.com/labstack/gommon v0.3.0 // indirect
+	github.com/mattn/go-sqlite3 v1.14.4
 	github.com/robfig/cron v1.2.0 // indirect
 	github.com/stretchr/testify v1.6.1 // indirect
 	github.com/valyala/fasttemplate v1.2.1 // indirect

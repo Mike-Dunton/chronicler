@@ -57,7 +57,7 @@ func (c *Context) Download(job *work.Job) error {
 	// Extract arguments:
 	URL := job.ArgString("url")
 	outputTemplate := job.ArgString(("outputTemplate"))
-	requestID := job.ArgString("requestID")
+	requestID := job.ArgInt64("requestID")
 	if err := job.ArgError(); err != nil {
 		return err
 	}

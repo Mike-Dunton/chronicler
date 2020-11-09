@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -11,9 +12,9 @@ import (
 	"github.com/gocraft/work"
 	"github.com/gocraft/work/webui"
 	"github.com/gomodule/redigo/redis"
-	guuid "github.com/google/uuid"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 const applicationConfig string = "/opt/chronicler/config.json"
@@ -22,6 +23,21 @@ const applicationConfig string = "/opt/chronicler/config.json"
 type DownloadRequest struct {
 	URL       string `json:"url"`
 	Subfolder string `json:"subfolder"`
+}
+
+// DownloadRecord defines the stored download metadata
+type DownloadRecord struct {
+	ID        int            `json:"id"`
+	URL       string         `json:"url"`
+	Subfolder string         `json:"subfolder"`
+	Output    sql.NullString `json:"output"`
+	Errors    sql.NullString `json:"errors"`
+	Finished  string         `json:"finished"`
+}
+
+// DownloadCollection collection of download records
+type DownloadCollection struct {
+	DownloadRecords []DownloadRecord `json:"downloads"`
 }
 
 //AppOptions struct
@@ -42,6 +58,11 @@ func main() {
 	// Make an enqueuer with a particular namespace
 	var enqueuer = work.NewEnqueuer("chronicler", redisPool)
 
+	db, err := sql.Open("sqlite3", "/data/sql.db")
+	if err != nil {
+		panic(err)
+	}
+	prepDatabase(db)
 	appConfig := parseOptionFile()
 	// Echo instance
 	e := echo.New()
@@ -49,9 +70,15 @@ func main() {
 	// Middleware
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
+	e.Static("/", "/usr/share/html")
 
+	apiRoutes := e.Group("/api")
+	apiRoutes.GET("/", func(c echo.Context) error {
+		downloads := allDownloadRecords(db)
+		return c.JSON(http.StatusOK, downloads)
+	})
 	// Route => handler
-	e.POST("/", func(c echo.Context) error {
+	apiRoutes.POST("/", func(c echo.Context) error {
 		downloadRequest := new(DownloadRequest)
 		if err := c.Bind(downloadRequest); err != nil {
 			return err
@@ -59,9 +86,12 @@ func main() {
 		if !Contains(appConfig.Subfolders, downloadRequest.Subfolder) {
 			return c.String(http.StatusBadRequest, fmt.Sprintf("Please select a valid subfolder: %v", appConfig.Subfolders))
 		}
-		id := guuid.New()
+		id, err := newDownloadRecord(db, downloadRequest)
+		if err != nil {
+			return c.String(http.StatusBadRequest, fmt.Sprintf("Error creating record: %v", err))
+		}
 		outputTemplate := fmt.Sprintf("%v/%%(title)s/%%(title)s-%%(id)s.%%(ext)s", downloadRequest.Subfolder)
-		_, err := enqueuer.Enqueue("exec_download", work.Q{"url": downloadRequest.URL, "outputTemplate": outputTemplate, "requestID": id.String()})
+		_, err = enqueuer.Enqueue("exec_download", work.Q{"url": downloadRequest.URL, "outputTemplate": outputTemplate, "requestID": id})
 		if err != nil {
 			return c.String(http.StatusBadRequest, fmt.Sprintf("Failed to queue request:  %q", err))
 		}
@@ -89,8 +119,6 @@ func parseOptionFile() (config AppOptions) {
 	if err != nil {
 		fmt.Println(err)
 	}
-	fmt.Println("Successfully Opened users.json")
-	// defer the closing of our jsonFile so that we can parse it later on
 	defer jsonFile.Close()
 	// read our opened jsonFile as a byte array.
 	byteValue, _ := ioutil.ReadAll(jsonFile)
@@ -109,4 +137,67 @@ func Contains(slice []string, val string) bool {
 		}
 	}
 	return false
+}
+
+func newDownloadRecord(db *sql.DB, request *DownloadRequest) (int64, error) {
+	sql := "INSERT INTO downloads(url, subfolder, finished) VALUES(?,?,?)"
+	stmt, err := db.Prepare(sql)
+	if err != nil {
+		return 0, err
+	}
+	defer stmt.Close()
+	result, sqlExecError := stmt.Exec(request.URL, request.Subfolder, "false")
+	if sqlExecError != nil {
+		return 0, sqlExecError
+	}
+	return result.LastInsertId()
+}
+
+func allDownloadRecords(db *sql.DB) DownloadCollection {
+	sql := "SELECT id, url, subfolder, output, error, finished FROM downloads"
+	rows, err := db.Query(sql)
+	// Exit if the SQL doesn't work for some reason
+	if err != nil {
+		panic(err)
+	}
+	// make sure to cleanup when the program exits
+	defer rows.Close()
+
+	result := DownloadCollection{}
+	for rows.Next() {
+		download := DownloadRecord{}
+		err2 := rows.Scan(&download.ID, &download.URL, &download.Subfolder, &download.Output, &download.Errors, &download.Finished)
+		// Exit if we get an error
+		if err2 != nil {
+			panic(err2)
+		}
+		result.DownloadRecords = append(result.DownloadRecords, download)
+	}
+	return result
+}
+
+func prepDatabase(db *sql.DB) {
+	downloads := `
+	CREATE TABLE IF NOT EXISTS downloads(
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		url TEXT, 
+		subfolder TEXT, 
+		output TEXT, 
+		error TEXT, 
+		finished TEXT NOT NULL
+		CHECK( typeof("finished") = "text" AND
+			"finished" IN ("true","false")
+		)
+	);
+	`
+	//statement, err := db.Prepare("CREATE TABLE IF NOT EXISTS downloads(id INTEGER PRIMARY KEY AUTOINCREMENT, url TEXT, subfolder TEXT, output TEXT, error TEXT, finished TEXT NOT NULL)")
+	_, err := db.Exec(downloads)
+	if err != nil {
+		panic(err)
+	}
+	// defer statement.Close()
+	// _, sqlExecError := statement.Exec()
+	// if sqlExecError != nil {
+	// 	panic(err)
+	// }
 }

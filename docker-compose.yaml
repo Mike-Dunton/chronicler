@@ -17,6 +17,7 @@ services:
       - type: bind
         source: ./configs/web.json
         target: /opt/chronicler/config.json
+      - "./data/:/data"
   worker:
     build:
       context: .
@@ -34,3 +35,4 @@ services:
         target: /workdir
         volume:
           nocopy: true  # flag to disable copying of data from a container when a volume is created
+      - "./data/:/data"
