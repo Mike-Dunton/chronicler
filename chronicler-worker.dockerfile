@@ -15,13 +15,17 @@ RUN adduser \
     "${USER}"
 
 WORKDIR $GOPATH/src/chronicler/worker/
-COPY ./worker .
 
+COPY go.mod ./
 RUN go mod download
 RUN go mod verify
+RUN go get -u -v github.com/mattn/go-sqlite3
+
+COPY worker .
 
 # Build the binary.
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -ldflags="-w -s" -o /go/bin/chronicler-worker
+RUN --mount=type=cache,uid=10001,target=/go/.cache/go-build \
+    CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /go/bin/worker
 
 FROM debian:stable-slim
 
@@ -45,9 +49,9 @@ RUN apt-get update -y && \
 COPY --from=builder /etc/passwd /etc/passwd
 COPY --from=builder /etc/group /etc/group
 # Copy our static executable.
-COPY --from=builder /go/bin/chronicler-worker /go/bin/chronicler-worker
+COPY --from=builder /go/bin/worker /go/bin/worker
 
 # Use an unprivileged user.
 USER appuser:appuser
 WORKDIR /workdir
-ENTRYPOINT ["/go/bin/chronicler-worker"]
+ENTRYPOINT ["/go/bin/worker"]

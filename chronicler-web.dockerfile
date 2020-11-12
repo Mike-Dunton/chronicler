@@ -1,3 +1,4 @@
+# syntax = docker/dockerfile:experimental
 FROM golang:alpine AS builder
 # Git is required for fetching the dependencies.
 RUN apk update && apk add --no-cache git build-base
@@ -14,14 +15,19 @@ RUN adduser \
     --uid "${UID}" \    
     "${USER}"
 
-WORKDIR $GOPATH/src/chronicler/web/
-COPY ./web .
+WORKDIR /app
+COPY go.mod ./
 
 RUN go mod download
 RUN go mod verify
+RUN go get -u -v github.com/mattn/go-sqlite3
 
+COPY web .
 # Build the binary.
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -a -ldflags '-w -linkmode external -extldflags "-static"' -o /go/bin/web
+# RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -a -ldflags '-w -linkmode external -extldflags "-static"' -o /go/bin/web
+
+RUN --mount=type=cache,uid=10001,target=/go/.cache/go-build \
+    CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /go/bin/web
 
 FROM node:14.1-alpine AS node-builder
 
@@ -34,7 +40,7 @@ ENV PATH="./node_modules/.bin:$PATH"
 COPY ./webui/ ./
 RUN npm run build
 
-FROM scratch
+FROM alpine
 
 # Import the user and group files from the builder.
 COPY --from=builder /etc/passwd /etc/passwd

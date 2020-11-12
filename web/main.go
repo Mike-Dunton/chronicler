@@ -96,7 +96,7 @@ func main() {
 			return c.String(http.StatusBadRequest, fmt.Sprintf("Failed to queue request:  %q", err))
 		}
 
-		return c.String(http.StatusOK, "thanks")
+		return c.String(http.StatusOK, fmt.Sprintf("sdRequestID : %v ", id))
 	})
 
 	server := webui.NewServer("chronicler", redisPool, ":8181")
@@ -190,14 +190,8 @@ func prepDatabase(db *sql.DB) {
 		)
 	);
 	`
-	//statement, err := db.Prepare("CREATE TABLE IF NOT EXISTS downloads(id INTEGER PRIMARY KEY AUTOINCREMENT, url TEXT, subfolder TEXT, output TEXT, error TEXT, finished TEXT NOT NULL)")
 	_, err := db.Exec(downloads)
 	if err != nil {
 		panic(err)
 	}
-	// defer statement.Close()
-	// _, sqlExecError := statement.Exec()
-	// if sqlExecError != nil {
-	// 	panic(err)
-	// }
 }

@@ -1,4 +1,4 @@
-module github.com/mike-dunton/chronicler/web
+module github.com/mike-dunton/chronicler
 
 go 1.15
 
