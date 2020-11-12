@@ -1,0 +1,15 @@
+{
+    "subfolders": ["video", "music"],
+    "redis": {
+        "host": "redis",
+        "port": "6379",
+        "namespace": "chronicler",
+        "httpPort": ":8181"
+    },
+    "database": {
+        "file": "/data/sql.db"
+    },
+    "web": {
+        "port": ":8080"
+    }
+}

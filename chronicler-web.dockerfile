@@ -15,19 +15,18 @@ RUN adduser \
     --uid "${UID}" \    
     "${USER}"
 
-WORKDIR /app
+WORKDIR $GOPATH/src/github.com/mike-dunton/
 COPY go.mod ./
 
 RUN go mod download
 RUN go mod verify
 RUN go get -u -v github.com/mattn/go-sqlite3
 
-COPY web .
-# Build the binary.
-# RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -a -ldflags '-w -linkmode external -extldflags "-static"' -o /go/bin/web
+COPY cmd cmd
+COPY pkg pkg 
 
 RUN --mount=type=cache,uid=10001,target=/go/.cache/go-build \
-    CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /go/bin/web
+    CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /go/bin/web ./cmd/web
 
 FROM node:14.1-alpine AS node-builder
 
