@@ -1,6 +1,8 @@
+# syntax = docker/dockerfile:experimental
+
 FROM golang:alpine AS builder
 # Git is required for fetching the dependencies.
-RUN apk update && apk add --no-cache git
+RUN apk update && apk add --no-cache git build-base
 
 # Create appuser.
 ENV USER=appuser
