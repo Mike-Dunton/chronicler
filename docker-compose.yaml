@@ -31,6 +31,9 @@ services:
         target: /etc/youtube-dl.conf
         read_only: true
       - type: bind
+        source: ./configs/chronicler.json
+        target: /opt/chronicler/config.json
+      - type: bind
         source: ./downloaded
         target: /workdir
         volume:

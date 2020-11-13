@@ -7,6 +7,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/mike-dunton/chronicler/pkg/adding"
 	"github.com/mike-dunton/chronicler/pkg/listing"
+	"github.com/mike-dunton/chronicler/pkg/updating"
 )
 
 // Storage is the interface that defines interacting with Download Records
@@ -124,4 +125,18 @@ func (s *Storage) AddDownloadRecord(dr *adding.DownloadRecord) (int64, error) {
 		return 0, sqlExecError
 	}
 	return result.LastInsertId()
+}
+
+//UpdateDownloadRecord Puts the records
+func (s *Storage) UpdateDownloadRecord(dr *updating.DownloadRecord) error {
+	sql := `
+	UPDATE downloads
+	SET output = $2, error = $3, finished = $4
+	WHERE id = $1;
+	`
+	_, err := s.db.Exec(sql, dr.ID, dr.Output, dr.Errors, dr.Finished)
+	if err != nil {
+		return err
+	}
+	return nil
 }

@@ -24,6 +24,7 @@ RUN go get -u -v github.com/mattn/go-sqlite3
 
 COPY cmd cmd
 COPY pkg pkg 
+COPY internal internal 
 
 RUN --mount=type=cache,uid=10001,target=/go/.cache/go-build \
     CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /go/bin/web ./cmd/web
@@ -31,12 +32,12 @@ RUN --mount=type=cache,uid=10001,target=/go/.cache/go-build \
 FROM node:14.1-alpine AS node-builder
 
 WORKDIR /opt/web
-COPY ./webui/package.json ./webui/package-lock.json ./
+COPY ./web/package.json ./web/package-lock.json ./
 RUN npm install
 
 ENV PATH="./node_modules/.bin:$PATH"
 
-COPY ./webui/ ./
+COPY ./web/ ./
 RUN npm run build
 
 FROM alpine
@@ -47,8 +48,6 @@ COPY --from=builder /etc/group /etc/group
 # Copy our static executable.
 COPY --from=builder /go/bin/web /go/bin/web
 COPY --from=node-builder /opt/web/build /usr/share/html
-
-COPY ./webui /src
 
 # Use an unprivileged user.
 USER appuser:appuser

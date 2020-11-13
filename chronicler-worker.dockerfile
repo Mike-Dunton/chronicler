@@ -25,6 +25,7 @@ RUN go get -u -v github.com/mattn/go-sqlite3
 
 COPY cmd cmd
 COPY pkg pkg
+COPY internal internal 
 
 # Build the binary.
 RUN --mount=type=cache,uid=10001,target=/go/.cache/go-build \

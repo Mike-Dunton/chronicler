@@ -1,78 +1,43 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
-	"log"
 	"os"
-	"os/exec"
 	"os/signal"
 
-	"github.com/gocraft/work"
-	"github.com/gomodule/redigo/redis"
+	"github.com/mike-dunton/chronicler/internal/config"
+	"github.com/mike-dunton/chronicler/pkg/listing"
+	"github.com/mike-dunton/chronicler/pkg/queue/workqueue"
+	"github.com/mike-dunton/chronicler/pkg/storage/sqlite"
+	"github.com/mike-dunton/chronicler/pkg/updating"
 )
 
+const applicationConfigFile string = "/opt/chronicler/config.json"
+
 // Context is worker context
-type Context struct {
-	requestID int64
-}
+type Context struct{}
 
 func main() {
-	// Make a redis pool
-	var redisPool = &redis.Pool{
-		MaxActive: 5,
-		MaxIdle:   5,
-		Wait:      true,
-		Dial: func() (redis.Conn, error) {
-			return redis.Dial("tcp", "redis:6379")
-		},
+	configService := config.NewService(applicationConfigFile)
+	appConfig, err := configService.LoadConfig()
+	if err != nil {
+		fmt.Print(err)
+		panic("Failed To Load Application Config")
 	}
 
-	pool := work.NewWorkerPool(Context{}, 5, "chronicler", redisPool)
-
-	pool.Middleware((*Context).Log)
-
-	// Map the name of jobs to handler functions
-	pool.Job("exec_download", (*Context).Download)
+	storage, _ := sqlite.NewStorage(appConfig.Database.File)
+	updater := updating.NewService(storage)
+	lister := listing.NewService(storage)
+	queue, _ := workqueue.NewQueue(appConfig.Redis.Host, appConfig.Redis.Port, appConfig.Redis.Namespace, appConfig.Redis.DebugPort, lister, updater)
+	// validator, _ := validating.NewValidator(appConfig.Subfolders)
+	// adder := adding.NewService(storage, queue, validator)
 
 	// Start processing jobs
-	pool.Start()
+	queue.StartWorkerPool()
 
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt, os.Kill)
 	<-signalChan
 
-	pool.Stop()
-
-}
-
-// Log is job middle ware that logs the job name.
-func (c *Context) Log(job *work.Job, next work.NextMiddlewareFunc) error {
-	log.Println("Starting job: ", job.Name)
-	return next()
-}
-
-// Download is this workers download function
-func (c *Context) Download(job *work.Job) error {
-	// Extract arguments:
-	URL := job.ArgString("url")
-	outputTemplate := job.ArgString(("outputTemplate"))
-	requestID := job.ArgInt64("requestID")
-	if err := job.ArgError(); err != nil {
-		return err
-	}
-	job.Checkin(fmt.Sprintf("Request: %v URL: %v", requestID, URL))
-	cmd := exec.Command("youtube-dl", fmt.Sprintf("-o %v", outputTemplate), URL)
-	var out bytes.Buffer
-	var errOut bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &errOut
-	err := cmd.Run()
-	if err != nil {
-		job.Checkin(fmt.Sprintf("Download Failed: %v URL: %v err: %v", requestID, URL, errOut.String()))
-		return err
-	}
-	job.Checkin(fmt.Sprintf("Successful Download: %v URL: %v output: %v", requestID, URL, out.String()))
-
-	return nil
+	queue.StopWorkerPool()
 }

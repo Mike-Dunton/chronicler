@@ -1,5 +1,5 @@
-webui/node_modules/
-webui/build/
+web/node_modules/
+web/build/
 data/
 terraform/
 downloaded/
