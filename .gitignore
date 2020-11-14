@@ -22,3 +22,4 @@ downloaded/
 sql.db
 node_modules/
 build/
+.idea/

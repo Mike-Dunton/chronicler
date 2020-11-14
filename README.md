@@ -22,8 +22,6 @@ Go based archival tool centered around youtube-dl
 - https://docs.docker.com/compose/compose-file/#dockerfile
 
 
-# for docker build ...
+### for build kit ...
 $env:DOCKER_BUILDKIT = 1
-
-# for docker-compose build ...
 $env:COMPOSE_DOCKER_CLI_BUILD = 1

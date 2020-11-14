@@ -3,148 +3,147 @@ package workqueue
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"os/exec"
+	"time"
 
-	"github.com/gocraft/work"
-	"github.com/gocraft/work/webui"
-	"github.com/gomodule/redigo/redis"
+	"github.com/go-redis/redis/v7"
 	"github.com/mike-dunton/chronicler/pkg/adding"
 	"github.com/mike-dunton/chronicler/pkg/listing"
 	"github.com/mike-dunton/chronicler/pkg/updating"
+	"github.com/taylorchu/work"
+	"github.com/taylorchu/work/middleware/discard"
+	"github.com/taylorchu/work/middleware/logrus"
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 )
 
 // Queue is the interface that defines interacting with Download Records
 type Queue struct {
-	queue      *work.Enqueuer
-	http       *webui.Server
-	workerPool *work.WorkerPool
+	queue      work.Queue
+	workerPool *work.Worker
+	namespace  string
+	logger     log.Logger
 }
 
-type context struct {
-	l listing.Service
-	u updating.Service
+type downloadRequest struct {
+	URL            string `json:"url"`
+	OutputTemplate string `json:"outputTemplate"`
+	RequestID      int64  `json:"requestID"`
 }
 
 // NewQueue returns a new Sql DB  storage
-func NewQueue(redisHost string, redisPort string, redisNamespace string, debugPort string, l listing.Service, u updating.Service) (*Queue, error) {
+func NewQueue(logger *log.Logger, redisHost string, redisPort string, redisNamespace string, l listing.Service, u updating.Service) (*Queue, error) {
 	q := new(Queue)
-
-	var redisPool = &redis.Pool{
-		MaxActive: 5,
-		MaxIdle:   5,
-		Wait:      true,
-		Dial: func() (redis.Conn, error) {
-			return redis.Dial("tcp", fmt.Sprintf("%s:%s", redisHost, redisPort))
-		},
-	}
-	err := ping(redisPool)
+	q.namespace = redisNamespace
+	q.logger = log.With(*logger, "pkg", "workqueue")
+	opt, err := redis.ParseURL(fmt.Sprintf("redis://%s:%s", redisHost, redisPort))
 	if err != nil {
 		return nil, err
 	}
+	redisClient := redis.NewClient(opt)
+	q.queue = work.NewRedisQueue(redisClient)
+	q.workerPool = work.NewWorker(&work.WorkerOptions{
+		Namespace: redisNamespace,
+		Queue:     q.queue,
+		ErrorFunc: func(err error) {
+			level.Error(q.logger).Log("err", err)
+		},
+	})
+	jobOpts := &work.JobOptions{
+		MaxExecutionTime: time.Minute,
+		IdleWait:         4 * time.Second,
+		NumGoroutines:    4,
+		HandleMiddleware: []work.HandleMiddleware{
+			logrus.HandleFuncLogger,
+			discard.After(time.Hour),
+		},
+	}
+	q.workerPool.Register("exec_download", func(job *work.Job, opts *work.DequeueOptions) error {
+		return doDownload(q, job, l, u)
+	}, jobOpts)
 
-	// Make an enqueuer with a particular namespace
-	q.queue = work.NewEnqueuer(redisNamespace, redisPool)
-	q.workerPool = work.NewWorkerPool(context{l, u}, 5, redisNamespace, redisPool)
-	q.workerPool.Middleware((*context).Log)
-	q.workerPool.Job("exec_download", (*context).DoDownload)
-	q.http = webui.NewServer(redisNamespace, redisPool, debugPort)
 	return q, nil
 }
 
 // EnqueueDownload enqueues the download
 func (q *Queue) EnqueueDownload(dr *adding.DownloadRecord, recordID int64) error {
 	outputTemplate := fmt.Sprintf("%v/%%(title)s/%%(title)s-%%(id)s.%%(ext)s", dr.Subfolder)
-	_, err := q.queue.Enqueue("exec_download", work.Q{"url": dr.URL, "outputTemplate": outputTemplate, "requestID": recordID})
+	job := work.NewJob()
+	err := job.MarshalJSONPayload(downloadRequest{dr.URL, outputTemplate, recordID})
 	if err != nil {
+		level.Error(q.logger).Log("err", fmt.Sprintf("MarshalJSONPayload Failed %v", err))
+		return err
+	}
+	err = q.queue.Enqueue(job, &work.EnqueueOptions{
+		Namespace: q.namespace,
+		QueueID:   "exec_download",
+	})
+	if err != nil {
+		level.Error(q.logger).Log("err", fmt.Sprintf("Enqueue Failed %v", err))
 		return err
 	}
 	return nil
 }
 
-func (c *context) DoDownload(job *work.Job) error {
+func doDownload(q *Queue, job *work.Job, l listing.Service, u updating.Service) error {
 	// Extract arguments:
-	URL := job.ArgString("url")
-	outputTemplate := job.ArgString(("outputTemplate"))
-	requestID := job.ArgInt64("requestID")
-	if err := job.ArgError(); err != nil {
-		return err
-	}
-	fmt.Println("1")
-	fmt.Printf("c %v", c)
-	dr, err := c.l.GetDownloadRecord(requestID)
+	var drArgs downloadRequest
+	err := job.UnmarshalJSONPayload(&drArgs)
 	if err != nil {
-		fmt.Println("2 ")
-		fmt.Printf("err %v", err)
-		job.Checkin(fmt.Sprintf("Failed to retreive RequestID %d from storage.", requestID))
 		return err
 	}
-	job.Checkin(fmt.Sprintf("Got Request: %d URL: %s", dr.ID, dr.URL))
-	cmd := exec.Command("youtube-dl", fmt.Sprintf("-o %v", outputTemplate), URL)
+	dr, err := l.GetDownloadRecord(drArgs.RequestID)
+	if err != nil {
+		level.Error(q.logger).Log("err", fmt.Sprintf("GetDownloadRecord Failed %v", err))
+		return err
+	}
+	fmt.Printf("Got Request: %d URL: %s\n", dr.ID, dr.URL)
+	cmd := exec.Command("youtube-dl", fmt.Sprintf("-o %v", drArgs.OutputTemplate), drArgs.URL)
 	var out bytes.Buffer
 	var errOut bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errOut
 	err = cmd.Run()
 	if err != nil {
-		fmt.Printf("3 err %v", err)
-		job.Checkin(fmt.Sprintf("Download Failed: %v URL: %v err: %v", requestID, URL, errOut.String()))
+		level.Error(q.logger).Log("cmd_error", err)
 		var ur updating.DownloadRecord
 		ur.ID = dr.ID
 		ur.Finished = "false"
 		ur.Errors = errOut.String()
 		ur.Output = out.String()
-		c.u.UpdateDownloadRecord(ur)
+		u.UpdateDownloadRecord(ur)
 		return err
 	}
-	job.Checkin(fmt.Sprintf("Successful Download: %v URL: %v output: %v", requestID, URL, out.String()))
+	level.Debug(q.logger).Log("msg", "Download Successful", "recordID", dr.ID)
 	var ur updating.DownloadRecord
 	ur.ID = dr.ID
 	ur.Finished = "true"
 	ur.Errors = errOut.String()
 	ur.Output = out.String()
-	c.u.UpdateDownloadRecord(ur)
+	u.UpdateDownloadRecord(ur)
 	return nil
-}
-
-func (c *context) Log(job *work.Job, next work.NextMiddlewareFunc) error {
-	log.Printf("Starting job: %s %v \n", job.Name, job.Args)
-	return next()
 }
 
 //StartServer starts listening on configured port
 func (q *Queue) StartServer() {
-	fmt.Println("Starting HTTP Work Pool")
-	q.http.Start()
+	level.Debug(q.logger).Log("msg", "Starting HTTP Work Pool")
+	//q.http.Start()
 }
 
 //StopServer stops the httpServer
 func (q *Queue) StopServer() {
-	fmt.Println("Stopping HTTP Work Pool")
-	q.http.Stop()
+	level.Debug(q.logger).Log("msg", "Stopping HTTP Work Pool")
+	//q.http.Stop()
 }
 
 //StartWorkerPool does what it says
 func (q *Queue) StartWorkerPool() {
-	fmt.Println("Starting Worker Pool")
+	level.Debug(q.logger).Log("msg", "Starting Worker Pool")
 	q.workerPool.Start()
 }
 
 //StopWorkerPool does what it says
 func (q *Queue) StopWorkerPool() {
-	fmt.Println("Stopping Worker Pool")
+	level.Debug(q.logger).Log("msg", "Starting Worker Pool")
 	q.workerPool.Stop()
-}
-
-func ping(pool *redis.Pool) error {
-	conn, err := pool.Dial()
-	defer conn.Close()
-	if err != nil {
-		return fmt.Errorf("ERROR: fail to connect to redis: %s", err.Error())
-	}
-	_, err = redis.String(conn.Do("PING"))
-	if err != nil {
-		return fmt.Errorf("ERROR: fail ping redis conn: %s", err.Error())
-	}
-	return nil
 }

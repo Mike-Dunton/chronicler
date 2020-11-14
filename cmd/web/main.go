@@ -9,6 +9,7 @@ import (
 	"github.com/labstack/echo/middleware"
 
 	"github.com/mike-dunton/chronicler/internal/config"
+	internalLog "github.com/mike-dunton/chronicler/internal/logging"
 	"github.com/mike-dunton/chronicler/pkg/adding"
 	"github.com/mike-dunton/chronicler/pkg/http/rest"
 	"github.com/mike-dunton/chronicler/pkg/listing"
@@ -20,9 +21,6 @@ import (
 
 const applicationConfigFile string = "/opt/chronicler/config.json"
 
-// Context is worker context
-type Context struct{}
-
 func main() {
 	configService := config.NewService(applicationConfigFile)
 	appConfig, err := configService.LoadConfig()
@@ -31,11 +29,13 @@ func main() {
 		panic("Failed To Load Application Config")
 	}
 
-	storage, _ := sqlite.NewStorage(appConfig.Database.File)
+	logger := internalLog.NewLogger("debug", "web")
+
+	storage, _ := sqlite.NewStorage(logger, appConfig.Database.File)
 	lister := listing.NewService(storage)
 	updater := updating.NewService(storage)
-	queue, _ := workqueue.NewQueue(appConfig.Redis.Host, appConfig.Redis.Port, appConfig.Redis.Namespace, appConfig.Redis.DebugPort, lister, updater)
-	validator, _ := validating.NewValidator(appConfig.Subfolders)
+	queue, _ := workqueue.NewQueue(logger, appConfig.Redis.Host, appConfig.Redis.Port, appConfig.Redis.Namespace, lister, updater)
+	validator, _ := validating.NewValidator( appConfig.Subfolders)
 	adder := adding.NewService(storage, queue, validator)
 
 	e := echo.New()
@@ -44,8 +44,8 @@ func main() {
 	// Middleware
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
-	e.Logger.Fatal(e.Start(appConfig.Web.Port))
 	queue.StartServer()
+	e.Logger.Fatal(e.Start(appConfig.Web.Port))
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, os.Kill)
 

@@ -2,7 +2,8 @@ package sqlite
 
 import (
 	"database/sql"
-
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	//sql driver
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/mike-dunton/chronicler/pkg/adding"
@@ -13,14 +14,15 @@ import (
 // Storage is the interface that defines interacting with Download Records
 type Storage struct {
 	db *sql.DB
+	logger log.Logger
 }
 
 // NewStorage returns a new Sql DB  storage
-func NewStorage(sqlDir string) (*Storage, error) {
+func NewStorage(logger *log.Logger ,sqlDir string) (*Storage, error) {
 	var err error
 
 	s := new(Storage)
-
+	s.logger = log.With(*logger, "pkg", "sqlite")
 	s.db, err = sql.Open("sqlite3", sqlDir)
 	if err != nil {
 		return nil, err
@@ -131,12 +133,16 @@ func (s *Storage) AddDownloadRecord(dr *adding.DownloadRecord) (int64, error) {
 func (s *Storage) UpdateDownloadRecord(dr *updating.DownloadRecord) error {
 	sql := `
 	UPDATE downloads
-	SET output = $2, error = $3, finished = $4
-	WHERE id = $1;
+	SET output = ?, error = ?, finished = ?
+	WHERE id = ?;
 	`
-	_, err := s.db.Exec(sql, dr.ID, dr.Output, dr.Errors, dr.Finished)
+	level.Debug(s.logger).Log("update_id", dr.ID)
+	res, err := s.db.Exec(sql, dr.Output, dr.Errors, dr.Finished, dr.ID)
 	if err != nil {
+		level.Error(s.logger).Log("msg", "Update Statement Failed", "err", err)
 		return err
 	}
+	rowsAffected, err := res.RowsAffected()
+	level.Debug(s.logger).Log("rows_affected", rowsAffected, "err", err)
 	return nil
 }

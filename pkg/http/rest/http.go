@@ -14,7 +14,11 @@ import (
 type H map[string]interface{}
 
 //Handler builds the function handlers
-func Handler(a adding.Service, l listing.Service, e *echo.Echo) *echo.Echo {
+func Handler(
+	a adding.Service,
+	l listing.Service,
+	e *echo.Echo,
+) *echo.Echo {
 	apiRoutes := e.Group("/api")
 	apiRoutes.GET("/", getRecords(l))
 	apiRoutes.GET("/:id", getRecord(l))
@@ -41,7 +45,7 @@ func getRecord(l listing.Service) echo.HandlerFunc {
 		}
 		downloadRecord, err := l.GetDownloadRecord(i)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, H{})
+			return c.JSON(http.StatusNotFound, H{})
 		}
 		return c.JSON(http.StatusOK, downloadRecord)
 	}
