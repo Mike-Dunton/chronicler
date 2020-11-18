@@ -11,5 +11,8 @@
     },
     "web": {
         "port": ":8080"
+    },
+    "downloads": {
+        "pathPrefix": "downloads"
     }
 }

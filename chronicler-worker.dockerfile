@@ -1,5 +1,3 @@
-# syntax = docker/dockerfile:experimental
-
 FROM golang:alpine AS builder
 # Git is required for fetching the dependencies.
 RUN apk update && apk add --no-cache git build-base
@@ -28,8 +26,7 @@ COPY pkg pkg
 COPY internal internal 
 
 # Build the binary.
-RUN --mount=type=cache,uid=10001,target=/go/.cache/go-build \
-    CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /go/bin/worker ./cmd/worker
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /go/bin/worker ./cmd/worker
 
 FROM python:alpine
 
@@ -46,7 +43,10 @@ COPY --from=builder /etc/group /etc/group
 # Copy our executable.
 COPY --from=builder /go/bin/worker /go/bin/worker
 
+RUN mkdir /downloads && chown -R appuser /downloads
+RUN mkdir /data  && chown -R appuser /data
 # Use an unprivileged user.
 USER appuser:appuser
 WORKDIR /workdir
+
 ENTRYPOINT ["/go/bin/worker"]

@@ -15,4 +15,7 @@ type AppConfig struct {
 	Web struct {
 		Port string `json:"port"`
 	} `json:"web"`
+	Downloads struct {
+		PathPrefix string `json:"pathPrefix"`
+	} `json:"downloads"`
 }

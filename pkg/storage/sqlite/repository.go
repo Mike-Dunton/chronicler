@@ -13,12 +13,12 @@ import (
 
 // Storage is the interface that defines interacting with Download Records
 type Storage struct {
-	db *sql.DB
+	db     *sql.DB
 	logger log.Logger
 }
 
 // NewStorage returns a new Sql DB  storage
-func NewStorage(logger *log.Logger ,sqlDir string) (*Storage, error) {
+func NewStorage(logger *log.Logger, sqlDir string) (*Storage, error) {
 	var err error
 
 	s := new(Storage)
@@ -42,6 +42,8 @@ func prepDatabase(db *sql.DB) error {
 		subfolder TEXT, 
 		output TEXT, 
 		error TEXT, 
+		title TEXT,
+		filename TEXT,
 		finished TEXT NOT NULL
 		CHECK( typeof("finished") = "text" AND
 			"finished" IN ("true","false")
@@ -57,7 +59,7 @@ func prepDatabase(db *sql.DB) error {
 
 //AllDownloadRecords gets records.
 func (s *Storage) AllDownloadRecords() (*[]listing.DownloadRecord, error) {
-	sql := "SELECT id, url, subfolder, output, error, finished FROM downloads"
+	sql := "SELECT id, url, subfolder, title, filename, output, error, finished FROM downloads"
 	rows, err := s.db.Query(sql)
 	// Exit if the SQL doesn't work for some reason
 	if err != nil {
@@ -69,7 +71,7 @@ func (s *Storage) AllDownloadRecords() (*[]listing.DownloadRecord, error) {
 	var resultDownloads []listing.DownloadRecord
 	for rows.Next() {
 		var download DownloadRecord
-		err = rows.Scan(&download.ID, &download.URL, &download.Subfolder, &download.Output, &download.Errors, &download.Finished)
+		err = rows.Scan(&download.ID, &download.URL, &download.Subfolder, &download.Title, &download.Filename, &download.Output, &download.Errors, &download.Finished)
 		// Exit if we get an error
 		if err != nil {
 			return nil, err
@@ -89,7 +91,7 @@ func (s *Storage) AllDownloadRecords() (*[]listing.DownloadRecord, error) {
 
 //GetDownloadRecord gets records.
 func (s *Storage) GetDownloadRecord(id int64) (*listing.DownloadRecord, error) {
-	sql := "SELECT id, url, subfolder, output, error, finished FROM downloads WHERE id = ?"
+	sql := "SELECT id, url, subfolder, title, filename, output, error, finished FROM downloads WHERE id = ?"
 	statement, err := s.db.Prepare(sql)
 	if err != nil {
 		return nil, err
@@ -98,7 +100,7 @@ func (s *Storage) GetDownloadRecord(id int64) (*listing.DownloadRecord, error) {
 	row := statement.QueryRow(id)
 
 	var download DownloadRecord
-	err = row.Scan(&download.ID, &download.URL, &download.Subfolder, &download.Output, &download.Errors, &download.Finished)
+	err = row.Scan(&download.ID, &download.URL, &download.Subfolder, &download.Title, &download.Filename, &download.Output, &download.Errors, &download.Finished)
 	// Exit if we get an error
 	if err != nil {
 		return nil, err
@@ -110,6 +112,8 @@ func (s *Storage) GetDownloadRecord(id int64) (*listing.DownloadRecord, error) {
 	resultDownload.Output = download.Output.String
 	resultDownload.Subfolder = download.Subfolder
 	resultDownload.URL = download.URL
+	resultDownload.Filename = download.Filename.String
+	resultDownload.Title = download.Title.String
 
 	return &resultDownload, nil
 }
@@ -131,13 +135,14 @@ func (s *Storage) AddDownloadRecord(dr *adding.DownloadRecord) (int64, error) {
 
 //UpdateDownloadRecord Puts the records
 func (s *Storage) UpdateDownloadRecord(dr *updating.DownloadRecord) error {
+	level.Debug(s.logger).Log("update_record", dr)
 	sql := `
 	UPDATE downloads
-	SET output = ?, error = ?, finished = ?
+	SET output = ?, error = ?, finished = ?, title = ?, filename = ?
 	WHERE id = ?;
 	`
 	level.Debug(s.logger).Log("update_id", dr.ID)
-	res, err := s.db.Exec(sql, dr.Output, dr.Errors, dr.Finished, dr.ID)
+	res, err := s.db.Exec(sql, dr.Output, dr.Errors, dr.Finished, dr.Title, dr.Filename, dr.ID)
 	if err != nil {
 		level.Error(s.logger).Log("msg", "Update Statement Failed", "err", err)
 		return err

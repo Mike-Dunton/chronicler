@@ -34,8 +34,8 @@ func main() {
 	storage, _ := sqlite.NewStorage(logger, appConfig.Database.File)
 	lister := listing.NewService(storage)
 	updater := updating.NewService(storage)
-	queue, _ := workqueue.NewQueue(logger, appConfig.Redis.Host, appConfig.Redis.Port, appConfig.Redis.Namespace, lister, updater)
-	validator, _ := validating.NewValidator( appConfig.Subfolders)
+	queue, _ := workqueue.NewQueue(logger, appConfig.Redis.Host, appConfig.Redis.Port, appConfig.Redis.Namespace, appConfig.Downloads.PathPrefix, lister, updater)
+	validator, _ := validating.NewValidator(appConfig.Subfolders)
 	adder := adding.NewService(storage, queue, validator)
 
 	e := echo.New()

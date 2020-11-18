@@ -1,7 +1,5 @@
 package updating
 
-import "fmt"
-
 // Service provides DownloadRecord updating operations.
 type Service interface {
 	UpdateDownloadRecord(...DownloadRecord) []error
@@ -24,7 +22,6 @@ func NewService(r Repository) Service {
 
 // AddDownloadRecord persists the given DownloadRecord(s) to storage
 func (s *service) UpdateDownloadRecord(dr ...DownloadRecord) (errorList []error) {
-	fmt.Printf("%v many records to update\n", len(dr))
 	for _, downloadRecord := range dr {
 		err := s.r.UpdateDownloadRecord(&downloadRecord)
 		if err != nil {

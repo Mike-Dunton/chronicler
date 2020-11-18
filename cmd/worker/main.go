@@ -23,13 +23,12 @@ func main() {
 		panic("Failed To Load Application Config")
 	}
 
-
-	logger := internalLog.NewLogger("debug", "web")
+	logger := internalLog.NewLogger("debug", "worker")
 
 	storage, _ := sqlite.NewStorage(logger, appConfig.Database.File)
 	updater := updating.NewService(storage)
 	lister := listing.NewService(storage)
-	queue, _ := workqueue.NewQueue(logger, appConfig.Redis.Host, appConfig.Redis.Port, appConfig.Redis.Namespace, lister, updater)
+	queue, _ := workqueue.NewQueue(logger, appConfig.Redis.Host, appConfig.Redis.Port, appConfig.Redis.Namespace, appConfig.Downloads.PathPrefix, lister, updater)
 
 	// Start processing jobs
 	queue.StartWorkerPool()

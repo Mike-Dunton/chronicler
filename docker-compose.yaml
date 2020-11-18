@@ -18,6 +18,7 @@ services:
         source: ./configs/chronicler.json
         target: /opt/chronicler/config.json
       - "./data/:/data"
+      - "./downloaded/:/downloads/"
   worker:
     build:
       context: .
@@ -33,9 +34,5 @@ services:
       - type: bind
         source: ./configs/chronicler.json
         target: /opt/chronicler/config.json
-      - type: bind
-        source: ./downloaded
-        target: /workdir
-        volume:
-          nocopy: true  # flag to disable copying of data from a container when a volume is created
+      - "./downloaded/:/downloads/"
       - "./data/:/data"

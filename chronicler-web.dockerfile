@@ -1,4 +1,3 @@
-# syntax = docker/dockerfile:experimental
 FROM golang:alpine AS builder
 # Git is required for fetching the dependencies.
 RUN apk update && apk add --no-cache git build-base
@@ -26,8 +25,7 @@ COPY cmd cmd
 COPY pkg pkg 
 COPY internal internal 
 
-RUN --mount=type=cache,uid=10001,target=/go/.cache/go-build \
-    CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /go/bin/web ./cmd/web
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /go/bin/web ./cmd/web
 
 FROM node:14.1-alpine AS node-builder
 
@@ -48,6 +46,9 @@ COPY --from=builder /etc/group /etc/group
 # Copy our static executable.
 COPY --from=builder /go/bin/web /go/bin/web
 COPY --from=node-builder /opt/web/build /usr/share/html
+
+RUN mkdir /downloads && chown -R appuser /downloads
+RUN mkdir /data  && chown -R appuser /data
 
 # Use an unprivileged user.
 USER appuser:appuser
